@@ -1,44 +1,62 @@
-﻿using UnityEngine;
-using UnityEngine.Networking;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.IO;
+using UnityEngine;
+using System.Collections;
+using System;
+using System.Net;
+using System.Net.Sockets;
+
 
 public class movement : MonoBehaviour {
-	public string ipaddress = "0.0.0.0";
+	public string sIP = "0.0.0.0";
 	public const int sPort = 8023;
-	int sID;
-	int ChanID;
-	int connectID;
+	public GameObject robot;
+	private Socket _clientSocket = new Socket(AddressFamily.InterNetwork,SocketType.Stream,ProtocolType.Tcp);
+  private byte[] _recieveBuffer = new byte[8142];
+	Rigidbody rb;
+	int VerticalSpeed;
+	int HorizontalSpeed;
 
-	public void SendSocketMessage() {
-	  byte error;
-	  byte[] buffer = new byte[1024];
-	  Stream stream = new MemoryStream(buffer);
-	  BinaryFormatter formatter = new BinaryFormatter();
-	  formatter.Serialize(stream, "HelloServer");
-	  int bufferSize = 1024;
-	  NetworkTransport.Send(sID, connectID, ChanID, buffer, bufferSize, out error);
-	}
+	private void ReceiveCallback(IAsyncResult AR)
+    {
+        //Check how much bytes are recieved and call EndRecieve to finalize handshake
+        int recieved = _clientSocket.EndReceive(AR);
 
-	public void Connect() {
-	  byte error;
-	  connectID = NetworkTransport.Connect(sID, ipaddress, sPort, 0, out error);
-	  Debug.Log("Connected to server. ConnectionId: " + connectID);
-		SendSocketMessage();
-	}
+        if(recieved <= 0)
+            return;
+
+        //Copy the recieved data into new buffer , to avoid null bytes
+        byte[] recData = new byte[recieved];
+        Buffer.BlockCopy(_recieveBuffer,0,recData,0,recieved);
+
+        //Process data here the way you want , all your bytes will be stored in recData
+				string response = System.Text.Encoding.UTF8.GetString(recData);
+				string[] data = response.Split(':');
+				VerticalSpeed = Int32.Parse(data[0]) / 3;
+				HorizontalSpeed = Int32.Parse(data[1]) / 3;
+				Debug.Log(response);
+				Debug.Log("Vertical speed: " + data[0] + "			Horizontal speed: " + data[1]);
+
+        //Start receiving again
+        _clientSocket.BeginReceive(_recieveBuffer,0,_recieveBuffer.Length,SocketFlags.None,new AsyncCallback(ReceiveCallback),null);
+    }
 
 	// Use this for initialization
 	void Start () {
-		NetworkTransport.Init();
-		ConnectionConfig config = new ConnectionConfig();
-		ChanID = config.AddChannel(QosType.Reliable);
-		int maxConnections = 10;
-		HostTopology topology = new HostTopology(config, maxConnections);
-		sID = NetworkTransport.AddHost(topology, sPort);
-		Debug.Log("SocketId is: " + sID);
+		try
+    {
+    	_clientSocket.Connect(new IPEndPoint(IPAddress.Parse(sIP),sPort));
+    }
+    catch(SocketException ex)
+    {
+    	Debug.Log(ex.Message);
+    }
+		Debug.Log("Connected");
+    _clientSocket.BeginReceive(_recieveBuffer,0,_recieveBuffer.Length,SocketFlags.None,new AsyncCallback(ReceiveCallback),null);
 	}
 
 	void FixedUpdate () {
+		rb = robot.GetComponent<Rigidbody>();
+		rb.AddRelativeForce(Vector3.forward * VerticalSpeed);
+		rb.AddRelativeForce(Vector3.right * HorizontalSpeed);
 
 	}
 }
