@@ -1,5 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.Networking;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.IO;
 
 public class movement : MonoBehaviour {
 	public string ipaddress = "0.0.0.0";
